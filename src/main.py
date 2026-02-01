@@ -1,13 +1,18 @@
 from aiogram import Bot, Dispatcher
-from aiogram.types import Message
+from aiogram.types import Message, BotCommand
 from aiogram.filters import CommandStart
 import os
 from dotenv import load_dotenv
 import asyncio
 from argparse import ArgumentParser
+from middlewares.middleware import DataBaseSessionMiddleware
+from database.database import create_tables
+from handlers.handler import router as handler
 load_dotenv(dotenv_path="./src/.env")
 
 dp = Dispatcher()
+dp.message.middleware(DataBaseSessionMiddleware())
+dp.include_router(handler)
 def get_token(mode: str) -> str:
     if mode ==  "dev":
         token = os.getenv("BOT_TOKEN_DEV")
@@ -18,10 +23,15 @@ def get_token(mode: str) -> str:
     if not token:
         raise RuntimeError(f"Token for mode '{mode}' not found in .env file. Check location and token")
     return token
-@dp.message(CommandStart())
-async def start_message(msg: Message):
-    await msg.answer(f"Hello,{msg.from_user.full_name}! The bot is currently unavailable while the admin is working on improving it. Sorry for the inconvenience.", parse_mode=None)
-
+# @dp.message(CommandStart())
+# async def start_message(msg: Message):
+#     await msg.answer(f"Hello,{msg.from_user.full_name}! The bot is currently unavailable while the admin is working on improving it. Sorry for the inconvenience.", parse_mode=None)
+async def set_bot_commands(bot: Bot):
+    commands = [
+        BotCommand(command="/start", description="Запуск бота"),
+        BotCommand(command="/help", description="Проблемы с ботом")
+    ]
+    await bot.set_my_commands(commands)
 async def main() -> None:
     #Parse CL arguments
     parser = ArgumentParser(description="Running tg-bot")
@@ -35,6 +45,8 @@ async def main() -> None:
     token = get_token(args.mode)
     # Initialize Bot instance 
     bot = Bot(token=token)
+    await create_tables()
+    await set_bot_commands(bot)
 
     # And the run events dispatching
     await dp.start_polling(bot)
