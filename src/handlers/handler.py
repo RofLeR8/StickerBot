@@ -40,7 +40,7 @@ class Form(StatesGroup):
     choose_option = State()
     choose_emoji = State()
     choose_keywords = State()
-    delete = State()
+    delete_sticker = State()
     add_user = State()
     temp_photo_path = State()
     sticker_emoji = State()
@@ -210,6 +210,7 @@ async def handle_keywords(message: Message, state: FSMContext, session: AsyncSes
 async def finish_sticker_creation(message: Message, state: FSMContext, session: AsyncSession, bot: Bot, user_id: int):
     data = await state.get_data()
     sticker_path = data.get("sticker_path")
+    is_admin = await check_admin(session, user_id)
     emoji = data.get("sticker_emoji", "❓")
     keywords = data.get("sticker_keywords", "")
 
@@ -240,7 +241,7 @@ async def finish_sticker_creation(message: Message, state: FSMContext, session: 
         )
 
         if result:
-            await message.answer("✅ Стикер успешно добавлен в пак!", reply_markup=common_kb())
+            await message.answer("✅ Стикер успешно добавлен в пак!", reply_markup=common_kb(is_admin))
             
             sticker_set = await bot.get_sticker_set(name=STICKER_SET_NAME)
             file_id = sticker_set.stickers[-1].file_id
@@ -257,7 +258,7 @@ async def finish_sticker_creation(message: Message, state: FSMContext, session: 
 
     except Exception as e:
         error_msg = str(e)
-        await message.answer(f"❌ Ошибка при добавлении стикера:\n{error_msg}", reply_markup=common_kb())
+        await message.answer(f"❌ Ошибка при добавлении стикера:\n{error_msg}", reply_markup=common_kb(is_admin))
         
         sticker_set = await bot.get_sticker_set(name=STICKER_SET_NAME)
         file_id = sticker_set.stickers[-1].file_id
@@ -275,3 +276,51 @@ async def finish_sticker_creation(message: Message, state: FSMContext, session: 
         except OSError:
             pass
         await state.clear()
+
+@router.message(F.text == "➖Sticker")
+async def handle_delete(message: Message, state: FSMContext):
+    await state.set_state(Form.delete_sticker)
+    await message.answer("Отправьте стикер, который хотите удалить.")
+
+
+@router.message(Form.delete_sticker)
+async def delete_sticker(message:Message, bot: Bot, session: AsyncSession, state: FSMContext):
+    user_id = message.from_user.id
+    sticker = message.sticker
+    if not sticker:
+        await message.answer("❌ Это не стикер! Попробуйте снова.", parse_mode=None)
+        await state.clear()
+    sticker_set_name = sticker.set_name
+    sticker_id = sticker.file_id
+
+    if sticker_set_name != STICKER_SET_NAME:
+        await message.answer(
+            f"❌ Этот стикер не из вашего набора!\n"
+            f"Ваш набор: {STICKER_SET_NAME}\n"
+            f"Стикер из: {sticker_set_name}",
+            parse_mode=None,
+        )
+        await state.clear()
+        return
+    try:
+        result = await bot.delete_sticker_from_set(sticker=sticker_id)
+    except Exception as e:
+        print(f"Error while deleting sticker {sticker_id}: {e}") 
+    
+    if result:
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text="✅ Стикер удалён из набора.",
+            )
+            await bot.send_message(chat_id=message.chat.id, text="Ссылка на стикерпак\nhttps://t.me/addstickers/qweasdzxc123_by_Stiker_durka_bot\n\nУдачи :)")
+
+        except Exception:
+            pass
+
+        oper = SOperAdd(
+            user_id=user_id,
+            type_op="delete",
+            sticker_id=sticker_id
+        )
+        await add_operation(session, oper)
