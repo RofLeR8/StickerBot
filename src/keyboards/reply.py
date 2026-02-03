@@ -19,3 +19,4 @@ def admin_kb() -> ReplyKeyboardMarkup:
     ]
     keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)
     return keyboard
+

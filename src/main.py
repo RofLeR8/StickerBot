@@ -12,6 +12,7 @@ load_dotenv(dotenv_path="./src/.env")
 
 dp = Dispatcher()
 dp.message.middleware(DataBaseSessionMiddleware())
+dp.callback_query.middleware(DataBaseSessionMiddleware())
 dp.include_router(handler)
 def get_token(mode: str) -> str:
     if mode ==  "dev":
