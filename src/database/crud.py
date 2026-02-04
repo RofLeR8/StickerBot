@@ -1,8 +1,14 @@
+import datetime
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from database.models import SUserAdd, SUserUpdate, SUserDelete, SOperAdd, SOperUpdate, SOperDelete
 from database.schemas import UserModel, OperationModel
 
+# -----------------------------------------------------------------------------
 # User CRUD
+# -----------------------------------------------------------------------------
 async def add_user(session: AsyncSession, user: SUserAdd):
     db_user = UserModel(**user.model_dump())
     session.add(db_user)
@@ -11,7 +17,7 @@ async def add_user(session: AsyncSession, user: SUserAdd):
     return db_user
 
 async def update_user(session: AsyncSession, user: SUserUpdate):
-    db_user = session.get(UserModel, user.id)
+    db_user = await session.get(UserModel, user.id)
     if not db_user:
         raise ValueError("User not found")
 
@@ -24,8 +30,8 @@ async def update_user(session: AsyncSession, user: SUserUpdate):
     await session.refresh(db_user)
     return db_user
 
-async def delete_user(session: AsyncSession, user: SUserDelete):
-    db_user = session.get(UserModel, user.id)
+async def delete_user_by_id(session: AsyncSession, user_id: int):
+    db_user = await session.get(UserModel, user_id)
     if not db_user:
         raise ValueError("User not found")
     await session.delete(db_user)
@@ -38,19 +44,50 @@ async def get_user_by_id(session: AsyncSession, user_id: int):
         return None
     return db_user
 
+async def get_all_admins(session: AsyncSession):
+    stmt = select(UserModel).where(UserModel.is_admin == True)
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def get_pending_users(session: AsyncSession):
+    """Пользователи с заявкой на регистрацию (is_approved=False), уже в таблице users."""
+    stmt = select(UserModel).where(UserModel.is_approved == False)
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def set_user_approved(session: AsyncSession, user_id: int, approved: bool = True):
+    """Одобрить или снять одобрение пользователя."""
+    db_user = await session.get(UserModel, user_id)
+    if not db_user:
+        raise ValueError("User not found")
+    db_user.is_approved = approved
+    await session.commit()
+    await session.refresh(db_user)
+    return db_user
+
+
 async def check_access(session: AsyncSession, user_id: int):
     db_user = await get_user_by_id(session, user_id)
-    return db_user is not None
+    return db_user is not None and db_user.is_approved
 
-async def check_admin(session: AsyncSession, user_id: int):
+async def check_admin(session: AsyncSession, user_id: int) -> bool:
     db_user = await get_user_by_id(session, user_id)
     if db_user is None:
         return False
     return db_user.is_admin
 
+
+# -----------------------------------------------------------------------------
 # Operation CRUD
+# -----------------------------------------------------------------------------
+
 async def add_operation(session: AsyncSession, oper: SOperAdd):
-    db_oper = OperationModel(**oper.model_dump())
+    data = oper.model_dump()
+    if data.get("created_at") is None:
+        data["created_at"] = datetime.datetime.now(datetime.UTC)
+    db_oper = OperationModel(**data)
     session.add(db_oper)
     await session.commit()
     await session.refresh(db_oper)

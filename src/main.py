@@ -30,7 +30,8 @@ def get_token(mode: str) -> str:
 async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="/start", description="Запуск бота"),
-        BotCommand(command="/help", description="Проблемы с ботом")
+        BotCommand(command="/help", description="Проблемы с ботом"),
+        BotCommand(command="/cancel", description="Отменить текущую операцию")
     ]
     await bot.set_my_commands(commands)
 async def main() -> None:
