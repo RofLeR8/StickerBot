@@ -29,7 +29,7 @@ def test_soper_add():
     assert o.sticker_id == "file_abc"
     assert o.created_at is None
 
-    o2 = SOperAdd(user_id=11, type_op="delete", sticker_id="x", created_at=datetime.datetime.now(datetime.UTC))
+    o2 = SOperAdd(user_id=11, type_op="delete", sticker_id="x", created_at=datetime.datetime.now())
     assert o2.created_at is not None
 
 

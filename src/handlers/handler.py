@@ -21,14 +21,23 @@ from database.crud import (
     add_user as crud_add_user,
     add_operation,
     get_all_admins,
+    get_all_users,
     get_pending_users,
     delete_user_by_id,
     set_user_approved,
+    set_user_admin,
 )
 from database.models import SUserAdd, SOperAdd
 from database.schemas import UserModel
 from keyboards.reply import common_kb, admin_kb, register_kb
-from keyboards.inline import support_keyboard, choose_option_bg, skip_keywords_kb
+from keyboards.inline import (
+    support_keyboard,
+    choose_option_bg,
+    skip_keywords_kb,
+    user_action_kb,
+    user_permissions_kb,
+    user_delete_confirm_kb,
+)
 from image.utils import resize_image, remove_background
 
 
@@ -75,7 +84,7 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
     if await check_access(session, user_id):
         is_admin = await check_admin(session, user_id)
         await message.answer(
-            f"Привет {message.from_user.first_name}, вам разрешено пользоваться ботом.\n Бот управляет стикерпаком Кабалиных\nhttps://t.me/addstickers/qweasdzxc123_by_Stiker_durka_bot",
+            f"Привет {message.from_user.first_name}, вам разрешено пользоваться ботом.\nБот управляет стикерпаком Кабалиных\nhttps://t.me/addstickers/qweasdzxc123_by_Stiker_durka_bot",
             parse_mode=None,
             reply_markup=common_kb(is_admin),
         )
@@ -130,7 +139,9 @@ async def add_sticker(message: Message, session: AsyncSession, state: FSMContext
         return 
     
     await state.set_state(Form.choose_image)
-    await message.answer("Отправьте мне изображение для стикера")
+    await message.answer(
+        "Отправьте фото для создания стикера или готовый стикер из любого набора — он будет добавлен в ваш стикерпак."
+    )
 
 
 # --- Обработка фото ---
@@ -149,13 +160,55 @@ async def handle_photo(message: Message, state: FSMContext, session: AsyncSessio
     photo = message.photo[-1]
 
     # Генерируем временнй путь
-    temp_input_path = os.path.join(tempfile.gettempdir(), f"{user_id}_{int(datetime.datetime.now(datetime.UTC).timestamp())}.jpg")
+    temp_input_path = os.path.join(tempfile.gettempdir(), f"{user_id}_{int(datetime.datetime.now().timestamp())}.jpg")
 
     await bot.download(photo, destination=temp_input_path) 
 
     await state.update_data(temp_photo_path=temp_input_path)
     await message.answer("Хочешь удалить фон?", reply_markup=choose_option_bg())
     await state.set_state(Form.choose_option)
+
+
+# --- Обработка готового стикера: скачать, конвертировать в PNG, добавить ---
+@router.message(F.sticker, Form.choose_image)
+async def handle_sticker(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    user_id = message.from_user.id
+    if not user_id:
+        return
+    if not await check_access(session, user_id):
+        await message.answer(
+            "Вам не разрешено пользоваться ботом. Использование бота разрешено семейству Кабалиных. "
+            "Отправьте заявку на регистрацию. Если произошло недоразумение, обращайтесь @Vot_eto_rofl",
+            parse_mode=None, reply_markup=register_kb(),
+        )
+        return
+
+    sticker = message.sticker
+    if sticker.is_animated or sticker.is_video:
+        await message.answer(
+            "❌ Поддерживаются только статичные стикеры. Анимированные и видео-стикеры нельзя конвертировать в PNG."
+        )
+        return
+
+    try:
+        file = await bot.get_file(sticker.file_id)
+        temp_path = os.path.join(tempfile.gettempdir(), f"{user_id}_{int(datetime.datetime.now().timestamp())}.webp")
+        await bot.download(file, destination=temp_path)
+
+        time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        final_path = os.path.join(PHOTO_DIR, f"{user_id}_{time_str}.png")
+        resize_image(temp_path, final_path)
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+
+        await state.update_data(sticker_path=final_path)
+        await state.set_state(Form.choose_emoji)
+        await message.answer("✅ Стикер конвертирован в PNG.\n\nТеперь отправьте эмодзи для стикера (например: 😊 или 🔥🎉)")
+    except Exception as e:
+        await state.clear()
+        await message.answer(f"❌ Ошибка при обработке стикера:\n{str(e)}")
 
 
 # --- Выбор обработки ---
@@ -171,7 +224,7 @@ async def process_choice(callback: CallbackQuery, state: FSMContext):
         return
 
     user_id = callback.from_user.id
-    time_str = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M-%S")
+    time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     final_path = os.path.join(PHOTO_DIR, f"{user_id}_{time_str}.png")
 
     try:
@@ -250,18 +303,15 @@ async def finish_sticker_creation(message: Message, state: FSMContext, session: 
         await state.clear()
         return
 
-    sticker_set_name = STICKER_SET_NAME # ← замени на своё!
+    sticker_set_name = STICKER_SET_NAME
 
     try:
-        # 1. Готовим файл
         sticker_file = FSInputFile(sticker_path)
-
-        # 2. Создаём InputSticker
         input_sticker = InputSticker(
             sticker=sticker_file,
             emoji_list=[emoji],
-            format="static", 
-            keywords=keywords or None
+            format="static",
+            keywords=keywords or None,
         )
 
         # 3. Добавляем в стикерпак
@@ -403,7 +453,7 @@ async def admin_back_to_main(message: Message, session: AsyncSession, state: FSM
     user_id = message.from_user.id
     is_admin = await check_admin(session, user_id) if await check_access(session, user_id) else False
     await message.answer(
-            f"Привет {message.from_user.first_name}, вам разрешено пользоваться ботом.\n Бот управляет стикерпаком Кабалиных\nhttps://t.me/addstickers/qweasdzxc123_by_Stiker_durka_bot",
+            f"Привет {message.from_user.first_name}, вам разрешено пользоваться ботом.\nБот управляет стикерпаком Кабалиных\nhttps://t.me/addstickers/qweasdzxc123_by_Stiker_durka_bot",
             parse_mode=None,
             reply_markup=common_kb(is_admin),
         )
@@ -481,6 +531,160 @@ async def admin_add_user_other(message: Message, session: AsyncSession, state: F
         await state.clear()
         return
     await message.answer("Отправьте Telegram ID (число) или перешлите сообщение от пользователя.")
+
+
+@router.message(F.text == "👥 Управление пользователями")
+async def admin_manage_users(message: Message, session: AsyncSession):
+    if not await check_admin(session, message.from_user.id):
+        return
+    users = await get_all_users(session)
+    if not users:
+        await message.answer("В базе нет пользователей.")
+        return
+
+    lines = []
+    for u in users:
+        status = []
+        if u.is_admin:
+            status.append("👑")
+        if u.is_approved:
+            status.append("✅")
+        else:
+            status.append("⏳")
+        name = f"{u.first_name or ''} {u.last_name or ''}".strip() or "—"
+        lines.append(f"ID {u.id} | {name} | {' '.join(status)}")
+
+    text = "👥 Пользователи (нажмите для действий):\n\n" + "\n".join(lines)
+    # Отправляем первых с кнопками (если много — можно пагинацию)
+    chunk = users[:15]
+    for u in chunk:
+        name = f"{u.first_name or ''} {u.last_name or ''}".strip() or f"ID {u.id}"
+        status = "👑" if u.is_admin else ""
+        status += " ✅" if u.is_approved else " ⏳"
+        await message.answer(
+            f"👤 {name} (ID: {u.id}) {status}",
+            reply_markup=user_action_kb(u.id),
+        )
+    if len(users) > 15:
+        await message.answer(f"... и ещё {len(users) - 15} пользователей.")
+
+
+@router.callback_query(F.data.startswith("admin_perm_"))
+async def admin_user_permissions(callback: CallbackQuery, session: AsyncSession):
+    if not await check_admin(session, callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    user_id = int(callback.data.split("_")[-1])
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip() or f"ID {user.id}"
+    text = f"🔐 Права: {name} (ID: {user.id})\nОдобрен: {'да' if user.is_approved else 'нет'}\nАдмин: {'да' if user.is_admin else 'нет'}"
+    await callback.message.edit_text(text, reply_markup=user_permissions_kb(user.id, user.is_approved, user.is_admin))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("perm_approve_"))
+async def admin_toggle_approve(callback: CallbackQuery, session: AsyncSession):
+    if not await check_admin(session, callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = callback.data.split("_")
+    user_id = int(parts[2])
+    approved = bool(int(parts[3]))
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+    await set_user_approved(session, user_id, approved=approved)
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip() or f"ID {user.id}"
+    try:
+        await callback.bot.send_message(user_id, "✅ Ваш доступ к боту одобрен!" if approved else "❌ Ваш доступ к боту заблокирован.")
+    except Exception:
+        pass
+    await callback.message.edit_text(
+        f"🔐 {name}: {'одобрен' if approved else 'заблокирован'}",
+        reply_markup=user_permissions_kb(user_id, approved, user.is_admin),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("perm_admin_"))
+async def admin_toggle_admin(callback: CallbackQuery, session: AsyncSession):
+    if not await check_admin(session, callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = callback.data.split("_")
+    user_id = int(parts[2])
+    is_admin = bool(int(parts[3]))
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+    await set_user_admin(session, user_id, is_admin=is_admin)
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip() or f"ID {user.id}"
+    try:
+        await callback.bot.send_message(user_id, "👑 Вам выданы права администратора бота." if is_admin else "👤 Права администратора сняты.")
+    except Exception:
+        pass
+    await callback.message.edit_text(
+        f"🔐 {name}: {'админ' if is_admin else 'обычный пользователь'}",
+        reply_markup=user_permissions_kb(user_id, user.is_approved, is_admin),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_users_back")
+async def admin_users_back(callback: CallbackQuery, session: AsyncSession):
+    if not await check_admin(session, callback.from_user.id):
+        await callback.answer()
+        return
+    await callback.message.edit_text("⬅️ Возврат. Используйте «👥 Управление пользователями» для нового списка.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_del_"))
+async def admin_delete_user(callback: CallbackQuery, session: AsyncSession):
+    if not await check_admin(session, callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    if callback.data == "admin_del_cancel":
+        await callback.message.edit_text("❌ Удаление отменено.")
+        await callback.answer()
+        return
+
+    if callback.data.startswith("admin_del_confirm_"):
+        user_id = int(callback.data.split("_")[-1])
+        user = await get_user_by_id(session, user_id)
+        if not user:
+            await callback.answer("Пользователь не найден", show_alert=True)
+            return
+        try:
+            await delete_user_by_id(session, user_id)
+            name = f"{user.first_name or ''} {user.last_name or ''}".strip() or f"ID {user.id}"
+            try:
+                await callback.bot.send_message(user_id, "❌ Вы удалены из базы пользователей бота.")
+            except Exception:
+                pass
+            await callback.message.edit_text(f"✅ Пользователь {name} удалён.")
+        except ValueError as e:
+            await callback.answer(str(e), show_alert=True)
+        await callback.answer()
+        return
+
+    # admin_del_{user_id} — показать подтверждение
+    user_id = int(callback.data.split("_")[-1])
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip() or f"ID {user.id}"
+    await callback.message.edit_text(
+        f"🗑 Удалить пользователя {name} (ID: {user_id})?",
+        reply_markup=user_delete_confirm_kb(user_id),
+    )
+    await callback.answer()
 
 
 @router.message(F.text == "📝 Список заявок")

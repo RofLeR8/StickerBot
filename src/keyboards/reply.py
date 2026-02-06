@@ -15,6 +15,7 @@ def common_kb(is_admin: bool) -> ReplyKeyboardMarkup:
 def admin_kb() -> ReplyKeyboardMarkup:
     kb_list = [
         [KeyboardButton(text="➕ Добавить пользователя")],
+        [KeyboardButton(text="👥 Управление пользователями")],
         [KeyboardButton(text="📝 Список заявок")],
         [KeyboardButton(text="⬅️ В главное меню")],
     ]

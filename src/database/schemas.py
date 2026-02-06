@@ -28,8 +28,8 @@ class OperationModel(Base):
     type_op: Mapped[str] = mapped_column(String(64), nullable=False)
     sticker_id: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime,
-        default=datetime.datetime.now(datetime.UTC),
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(),
         nullable=False,
     )
 

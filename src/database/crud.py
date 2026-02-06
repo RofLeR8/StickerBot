@@ -50,6 +50,24 @@ async def get_all_admins(session: AsyncSession):
     return list(result.all())
 
 
+async def get_all_users(session: AsyncSession):
+    """Все пользователи (для админ-панели)."""
+    stmt = select(UserModel).order_by(UserModel.id)
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def set_user_admin(session: AsyncSession, user_id: int, is_admin: bool):
+    """Выдать или забрать права админа."""
+    db_user = await session.get(UserModel, user_id)
+    if not db_user:
+        raise ValueError("User not found")
+    db_user.is_admin = is_admin
+    await session.commit()
+    await session.refresh(db_user)
+    return db_user
+
+
 async def get_pending_users(session: AsyncSession):
     """Пользователи с заявкой на регистрацию (is_approved=False), уже в таблице users."""
     stmt = select(UserModel).where(UserModel.is_approved == False)
@@ -86,7 +104,7 @@ async def check_admin(session: AsyncSession, user_id: int) -> bool:
 async def add_operation(session: AsyncSession, oper: SOperAdd):
     data = oper.model_dump()
     if data.get("created_at") is None:
-        data["created_at"] = datetime.datetime.now(datetime.UTC)
+        data["created_at"] = datetime.datetime.now()
     db_oper = OperationModel(**data)
     session.add(db_oper)
     await session.commit()

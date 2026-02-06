@@ -6,8 +6,10 @@ from database.crud import (
     add_user,
     get_user_by_id,
     get_all_admins,
+    get_all_users,
     get_pending_users,
     set_user_approved,
+    set_user_admin,
     delete_user_by_id,
     check_access,
     check_admin,
@@ -99,6 +101,32 @@ async def test_get_all_admins(db_session):
 
 
 @pytest.mark.asyncio
+async def test_get_all_users(db_session):
+    await add_user(db_session, SUserAdd(id=50, first_name="U1", is_approved=True))
+    await add_user(db_session, SUserAdd(id=51, first_name="U2", is_approved=False))
+
+    users = await get_all_users(db_session)
+    assert len(users) == 2
+    ids = [u.id for u in users]
+    assert 50 in ids and 51 in ids
+
+
+@pytest.mark.asyncio
+async def test_set_user_admin(db_session):
+    await add_user(db_session, SUserAdd(id=60, first_name="X", is_admin=False, is_approved=True))
+    assert await check_admin(db_session, 60) is False
+
+    await set_user_admin(db_session, 60, is_admin=True)
+    u = await get_user_by_id(db_session, 60)
+    assert u.is_admin is True
+    assert await check_admin(db_session, 60) is True
+
+    await set_user_admin(db_session, 60, is_admin=False)
+    u = await get_user_by_id(db_session, 60)
+    assert u.is_admin is False
+
+
+@pytest.mark.asyncio
 async def test_add_operation_and_get(db_session):
     await add_user(db_session, SUserAdd(id=100, first_name="Op", is_approved=True))
     oper = await add_operation(
@@ -119,10 +147,10 @@ async def test_add_operation_and_get(db_session):
 @pytest.mark.asyncio
 async def test_add_operation_sets_created_at(db_session):
     await add_user(db_session, SUserAdd(id=101, first_name="U", is_approved=True))
-    before = datetime.datetime.now(datetime.UTC)
+    before = datetime.datetime.now()
     oper = await add_operation(
         db_session,
         SOperAdd(user_id=101, type_op="delete", sticker_id="sticker_456"),
     )
-    after = datetime.datetime.now(datetime.UTC)
+    after = datetime.datetime.now()
     assert before <= oper.created_at <= after
