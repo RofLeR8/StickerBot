@@ -7,13 +7,23 @@ import asyncio
 from argparse import ArgumentParser
 from middlewares.middleware import DataBaseSessionMiddleware
 from database.database import create_tables
-from handlers.handler import router as handler
+from handlers import (
+    start_router,
+    sticker_add_router,
+    sticker_delete_router,
+    admin_router,
+    register_router,
+)
 load_dotenv(dotenv_path="./src/.env")
 
 dp = Dispatcher()
 dp.message.middleware(DataBaseSessionMiddleware())
 dp.callback_query.middleware(DataBaseSessionMiddleware())
-dp.include_router(handler)
+dp.include_router(start_router)
+dp.include_router(sticker_add_router)
+dp.include_router(sticker_delete_router)
+dp.include_router(admin_router)
+dp.include_router(register_router)
 def get_token(mode: str) -> str:
     if mode ==  "dev":
         token = os.getenv("BOT_TOKEN_DEV")

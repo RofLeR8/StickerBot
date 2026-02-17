@@ -138,3 +138,18 @@ async def delete_operation(session: AsyncSession, oper: SOperDelete):
     await session.delete(db_oper)
     await session.commit()
     return True
+
+
+async def get_operations_paginated(session: AsyncSession, limit: int = 10, offset: int = 0):
+    """Получить операции с пагинацией."""
+    stmt = select(OperationModel).order_by(OperationModel.created_at.desc()).limit(limit).offset(offset)
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def get_operations_count(session: AsyncSession):
+    """Получить общее количество операций."""
+    from sqlalchemy import func
+    stmt = select(func.count(OperationModel.id))
+    result = await session.execute(stmt)
+    return result.scalar()

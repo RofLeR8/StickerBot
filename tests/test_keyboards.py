@@ -10,6 +10,7 @@ from keyboards.inline import (
     user_action_kb,
     user_permissions_kb,
     user_delete_confirm_kb,
+    operations_pagination_kb,
 )
 
 
@@ -38,6 +39,8 @@ def test_admin_kb():
     assert "➕ Добавить пользователя" in texts
     assert "👥 Управление пользователями" in texts
     assert "📝 Список заявок" in texts
+    assert "📋 История операций" in texts
+    assert "🔍 Найти стикер" in texts
     assert "⬅️ В главное меню" in texts
 
 
@@ -88,3 +91,41 @@ def test_user_delete_confirm_kb():
     assert isinstance(kb, InlineKeyboardMarkup)
     assert any("admin_del_confirm_789" in (b.callback_data or "") for row in kb.inline_keyboard for b in row)
     assert any(b.callback_data == "admin_del_cancel" for row in kb.inline_keyboard for b in row)
+
+
+def test_operations_pagination_kb_first_page():
+    kb = operations_pagination_kb(page=1, total_pages=5)
+    assert isinstance(kb, InlineKeyboardMarkup)
+    # На первой странице нет кнопки "Назад"
+    assert not any(b.callback_data == "ops_page_0" for row in kb.inline_keyboard for b in row)
+    # Есть кнопка "Вперёд"
+    assert any(b.callback_data == "ops_page_2" for row in kb.inline_keyboard for b in row)
+    # Есть кнопка "Обновить"
+    assert any(b.callback_data == "ops_refresh" for row in kb.inline_keyboard for b in row)
+
+
+def test_operations_pagination_kb_middle_page():
+    kb = operations_pagination_kb(page=3, total_pages=5)
+    assert isinstance(kb, InlineKeyboardMarkup)
+    # Есть кнопка "Назад"
+    assert any(b.callback_data == "ops_page_2" for row in kb.inline_keyboard for b in row)
+    # Есть кнопка "Вперёд"
+    assert any(b.callback_data == "ops_page_4" for row in kb.inline_keyboard for b in row)
+
+
+def test_operations_pagination_kb_last_page():
+    kb = operations_pagination_kb(page=5, total_pages=5)
+    assert isinstance(kb, InlineKeyboardMarkup)
+    # Есть кнопка "Назад"
+    assert any(b.callback_data == "ops_page_4" for row in kb.inline_keyboard for b in row)
+    # Нет кнопки "Вперёд"
+    assert not any(b.callback_data == "ops_page_6" for row in kb.inline_keyboard for b in row)
+
+
+def test_operations_pagination_kb_single_page():
+    kb = operations_pagination_kb(page=1, total_pages=1)
+    assert isinstance(kb, InlineKeyboardMarkup)
+    # Нет кнопок навигации
+    assert not any("ops_page_" in (b.callback_data or "") for row in kb.inline_keyboard for b in row)
+    # Есть кнопка "Обновить"
+    assert any(b.callback_data == "ops_refresh" for row in kb.inline_keyboard for b in row)

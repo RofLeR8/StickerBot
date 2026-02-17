@@ -17,6 +17,8 @@ def admin_kb() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="➕ Добавить пользователя")],
         [KeyboardButton(text="👥 Управление пользователями")],
         [KeyboardButton(text="📝 Список заявок")],
+        [KeyboardButton(text="📋 История операций")],
+        [KeyboardButton(text="🔍 Найти стикер")],
         [KeyboardButton(text="⬅️ В главное меню")],
     ]
     keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)

@@ -66,3 +66,25 @@ def skip_keywords_kb():
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=kb_list)
     return keyboard
+
+
+def operations_pagination_kb(page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Клавиатура пагинации для списка операций."""
+    buttons = []
+    row = []
+
+    # Кнопка "Назад"
+    if page > 1:
+        row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"ops_page_{page - 1}"))
+
+    # Кнопка "Вперёд"
+    if page < total_pages:
+        row.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"ops_page_{page + 1}"))
+
+    if row:
+        buttons.append(row)
+
+    # Кнопка "Обновить"
+    buttons.append([InlineKeyboardButton(text="🔄 Обновить", callback_data="ops_refresh")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

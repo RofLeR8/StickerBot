@@ -15,6 +15,8 @@ from database.crud import (
     check_admin,
     add_operation,
     get_operation,
+    get_operations_paginated,
+    get_operations_count,
 )
 from database.models import SUserAdd, SUserUpdate, SOperAdd
 
@@ -154,3 +156,40 @@ async def test_add_operation_sets_created_at(db_session):
     )
     after = datetime.datetime.now()
     assert before <= oper.created_at <= after
+
+
+@pytest.mark.asyncio
+async def test_get_operations_paginated(db_session):
+    """Test get operations with pagination."""
+    await add_user(db_session, SUserAdd(id=200, first_name="Op", is_approved=True))
+
+    for i in range(12):
+        await add_operation(
+            db_session,
+            SOperAdd(user_id=200, type_op="add", sticker_id=f"sticker_{i}"),
+        )
+
+    ops_page1 = await get_operations_paginated(db_session, limit=5, offset=0)
+    ops_page2 = await get_operations_paginated(db_session, limit=5, offset=5)
+    ops_page3 = await get_operations_paginated(db_session, limit=5, offset=10)
+
+    assert len(ops_page1) == 5
+    assert len(ops_page2) == 5
+    assert len(ops_page3) == 2
+    assert ops_page1[0].sticker_id == "sticker_11"
+
+
+@pytest.mark.asyncio
+async def test_get_operations_count(db_session):
+    """Test get operations count."""
+    await add_user(db_session, SUserAdd(id=201, first_name="Op", is_approved=True))
+
+    count_before = await get_operations_count(db_session)
+
+    await add_operation(
+        db_session,
+        SOperAdd(user_id=201, type_op="add", sticker_id="sticker_count"),
+    )
+
+    count_after = await get_operations_count(db_session)
+    assert count_after == count_before + 1
