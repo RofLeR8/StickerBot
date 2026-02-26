@@ -1,10 +1,13 @@
 import datetime
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import SUserAdd, SUserUpdate, SUserDelete, SOperAdd, SOperUpdate, SOperDelete
 from database.schemas import UserModel, OperationModel
+
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
 # User CRUD
@@ -14,33 +17,40 @@ async def add_user(session: AsyncSession, user: SUserAdd):
     session.add(db_user)
     await session.commit()
     await session.refresh(db_user)
+    logger.info("User %d added to database", db_user.id)
     return db_user
 
 async def update_user(session: AsyncSession, user: SUserUpdate):
     db_user = await session.get(UserModel, user.id)
     if not db_user:
+        logger.error("User %d not found for update", user.id)
         raise ValueError("User not found")
 
-    update_data = {k: v for k, v in user.model_dump().items() if v is not None}
+    update_data = {k: v for k, v in user.model_dump().items() if k != "id" and v is not None}
+    logger.debug("User %d update data: %s", user.id, update_data)
 
     for key, value in update_data.items():
         setattr(db_user, key, value)
 
     await session.commit()
     await session.refresh(db_user)
+    logger.info("User %d updated", user.id)
     return db_user
 
 async def delete_user_by_id(session: AsyncSession, user_id: int):
     db_user = await session.get(UserModel, user_id)
     if not db_user:
+        logger.error("User %d not found for deletion", user_id)
         raise ValueError("User not found")
     await session.delete(db_user)
     await session.commit()
+    logger.info("User %d deleted from database", user_id)
     return True
 
 async def get_user_by_id(session: AsyncSession, user_id: int):
     db_user = await session.get(UserModel, user_id)
     if not db_user:
+        logger.debug("User %d not found", user_id)
         return None
     return db_user
 
@@ -88,7 +98,9 @@ async def set_user_approved(session: AsyncSession, user_id: int, approved: bool 
 
 async def check_access(session: AsyncSession, user_id: int):
     db_user = await get_user_by_id(session, user_id)
-    return db_user is not None and db_user.is_approved
+    has_access = db_user is not None and db_user.is_approved
+    logger.debug("User %d access check: %s", user_id, has_access)
+    return has_access
 
 async def check_admin(session: AsyncSession, user_id: int) -> bool:
     db_user = await get_user_by_id(session, user_id)
@@ -109,6 +121,7 @@ async def add_operation(session: AsyncSession, oper: SOperAdd):
     session.add(db_oper)
     await session.commit()
     await session.refresh(db_oper)
+    logger.info("Operation logged: user_id=%d, type=%s", oper.user_id, oper.type_op)
     return db_oper
 
 

@@ -1,6 +1,7 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from database.crud import (
     get_user_by_id,
@@ -10,12 +11,15 @@ from database.crud import (
 )
 from database.schemas import UserModel
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
 @router.message(F.text == "📝 Зарегистрироваться")
 async def register_request(message: Message, session: AsyncSession, bot: Bot):
     user_id = message.from_user.id
+    logger.info("User %d: registration request", user_id)
+    
     first_name = message.from_user.first_name
     last_name = message.from_user.last_name if message.from_user.last_name else None
     username = (message.from_user.username or "—").strip()
@@ -23,8 +27,10 @@ async def register_request(message: Message, session: AsyncSession, bot: Bot):
     existing = await get_user_by_id(session, user_id)
     if existing:
         if existing.is_approved:
+            logger.info("User %d: already registered and approved", user_id)
             await message.answer("Вы уже зарегистрированы!")
         else:
+            logger.info("User %d: already registered but pending approval", user_id)
             await message.answer(
                 "Ваша заявка уже отправлена и ожидает подтверждения."
             )
@@ -39,8 +45,11 @@ async def register_request(message: Message, session: AsyncSession, bot: Bot):
     )
     await session.add(new_user)
     await session.commit()
+    logger.info("User %d: registration saved to database, pending approval", user_id)
 
     admins = await get_all_admins(session)
+    logger.info("User %d: notifying %d admins", user_id, len(admins))
+    
     for admin in admins:
         try:
             await bot.send_message(
@@ -65,7 +74,7 @@ async def register_request(message: Message, session: AsyncSession, bot: Bot):
                 ),
             )
         except Exception as e:
-            print(f"Не удалось отправить админу {admin.id}: {e}")
+            logger.error("Failed to notify admin %d: %s", admin.id, str(e))
 
     await message.answer(
         "✅ Заявка отправлена! Ожидайте подтверждения от администратора."

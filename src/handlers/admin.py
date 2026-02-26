@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from database.crud import (
     check_admin,
@@ -28,6 +29,7 @@ from keyboards.inline import (
     operations_pagination_kb,
 )
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -39,9 +41,14 @@ class Form(StatesGroup):
 @router.message(F.text == "⚙️Admin Panel")
 async def handle_admin_panel(message: Message, session: AsyncSession):
     user_id = message.from_user.id
+    logger.info("User %d: accessing admin panel", user_id)
+    
     if not await check_admin(session, user_id):
+        logger.warning("User %d: denied access to admin panel - not admin", user_id)
         await message.answer("❌ Вы не админ бота!")
         return
+    
+    logger.info("User %d: admin panel access granted", user_id)
     await message.answer("Админ-панель. Выберите действие:", reply_markup=admin_kb())
 
 

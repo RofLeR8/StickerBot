@@ -14,7 +14,12 @@ from handlers import (
     admin_router,
     register_router,
 )
+from logging_config import setup_logging
+import logging
+
 load_dotenv(dotenv_path="./src/.env")
+setup_logging(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 dp = Dispatcher()
 dp.message.middleware(DataBaseSessionMiddleware())
@@ -32,7 +37,9 @@ def get_token(mode: str) -> str:
     else:
         raise ValueError("Mode must be 'dev' or 'prod'")
     if not token:
+        logger.error("Token for mode '%s' not found in .env file", mode)
         raise RuntimeError(f"Token for mode '{mode}' not found in .env file. Check location and token")
+    logger.info("Bot token loaded for mode: %s", mode)
     return token
 # @dp.message(CommandStart())
 # async def start_message(msg: Message):
@@ -44,6 +51,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="/cancel", description="Отменить текущую операцию")
     ]
     await bot.set_my_commands(commands)
+    logger.info("Bot commands configured")
 async def main() -> None:
     #Parse CL arguments
     parser = ArgumentParser(description="Running tg-bot")
@@ -54,12 +62,19 @@ async def main() -> None:
         help="Runnning mode: 'dev' for developing, 'prod' for production"
     )
     args = parser.parse_args()
+    logger.info("Starting bot in mode: %s", args.mode)
+    
     token = get_token(args.mode)
-    # Initialize Bot instance 
+    # Initialize Bot instance
     bot = Bot(token=token)
+    logger.info("Bot initialized")
+    
     await create_tables()
+    logger.info("Database tables created")
+    
     await set_bot_commands(bot)
 
+    logger.info("Starting polling...")
     # And the run events dispatching
     await dp.start_polling(bot)
 if __name__ == "__main__":

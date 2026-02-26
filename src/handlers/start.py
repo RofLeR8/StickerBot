@@ -1,4 +1,5 @@
 import os
+import logging
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -9,14 +10,18 @@ from database.crud import check_access, check_admin
 from keyboards.reply import common_kb, register_kb
 from keyboards.inline import support_keyboard
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
     user_id = message.from_user.id
+    logger.info("User %d: /start command", user_id)
+    
     if await check_access(session, user_id):
         is_admin = await check_admin(session, user_id)
+        logger.info("User %d: access granted, is_admin=%s", user_id, is_admin)
         await message.answer(
             f"Привет {message.from_user.first_name}, вам разрешено пользоваться ботом.\n"
             "Бот управляет стикерпаком Кабалиных\n"
@@ -26,6 +31,7 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
         )
         await state.clear()
     else:
+        logger.info("User %d: access denied - not registered", user_id)
         await message.answer(
             "Вам не разрешено пользоваться ботом. \n"
             "Использование бота разрешено семейству Кабалиных.\n"

@@ -6,7 +6,6 @@
 __pycache__
 *.pyc
 tests
-*.md
 .dockerignore
-Dockerfile
 photos/
+*.log

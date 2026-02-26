@@ -3,7 +3,8 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
-    PHOTO_DIR=/app/data/photos
+    PHOTO_DIR=/app/data/photos \
+    LOG_LEVEL=INFO
 
 WORKDIR /app
 
